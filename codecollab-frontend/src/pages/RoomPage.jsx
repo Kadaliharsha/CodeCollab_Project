@@ -1,0 +1,696 @@
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
+import Editor from '@monaco-editor/react';
+import Layout from '../components/Layout';
+
+const RoomPage = () => {
+  const { roomId } = useParams();
+  const navigate = useNavigate();
+  
+  // State for the view and data
+  const [view, setView] = useState('lobby'); // 'lobby' or 'coding'
+  const [problems, setProblems] = useState([]);
+  const [problem, setProblem] = useState(null);
+  const [language, setLanguage] = useState('python');
+  const [output, setOutput] = useState('');
+  const [status, setStatus] = useState('Connecting...');
+  const [code, setCode] = useState('');
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [users, setUsers] = useState([]); // Track users in room
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true); // Track if users are loading
+  
+     // Refs for instances that shouldn't trigger re-renders
+  const socketRef = useRef(null);
+  const editorRef = useRef(null);
+  const isUpdatingFromSocket = useRef(false);
+  const lastSentCode = useRef(''); // Track last sent code to prevent duplicates
+  const lastReceivedCode = useRef(''); // Track last received code to prevent echo loops
+  const messageIdCounter = useRef(0); // Unique message ID to prevent echo loops
+  const recentMessageIds = useRef(new Set()); // Track recent message IDs to prevent echo loops
+  const lastUpdateTime = useRef(0); // Track last update time to prevent rapid updates
+
+  // Function to get Monaco language ID
+  const getMonacoLanguage = (lang) => {
+    switch (lang) {
+      case 'python': return 'python';
+      case 'cpp': return 'cpp';
+      case 'java': return 'java';
+      default: return 'python';
+    }
+  };
+
+     // Function to handle editor changes
+  const handleEditorChange = useCallback((value, event) => {
+     // Only send socket events if we're not currently updating from a socket
+    if (!isUpdatingFromSocket.current && value !== undefined) {
+       // Additional check: don't send if the value is the same as current code
+      if (value !== code) {
+        console.log('🔄 handleEditorChange: value changed from', code, 'to', value);
+         
+                 // Prevent sending duplicate code - more robust check
+        if (value === lastSentCode.current) {
+          console.log('🔄 Skipping socket emission - duplicate code detected');
+          setCode(value);
+          return;
+        }
+        
+        // Additional check: don't send if this is the same content we just received
+        if (value === lastReceivedCode.current) {
+          console.log('🔄 Skipping socket emission - content matches lastReceivedCode');
+          setCode(value);
+          return;
+        }
+         
+         // Final safety check: don't send if we're in the middle of a socket update
+        if (isUpdatingFromSocket.current) {
+          console.log('🔄 Skipping socket emission - socket update in progress');
+          setCode(value);
+          return;
+        }
+         
+                 // Only update state if it's actually different
+        if (value !== code) {
+          setCode(value);
+        }
+        lastSentCode.current = value; // Track what we just sent
+        console.log('🔄 Updated lastSentCode in handleEditorChange to:', value.substring(0, 50) + '...');
+         
+                          // Immediate socket emission for better real-time sync
+        if (socketRef.current) {
+          const messageId = ++messageIdCounter.current;
+           console.log('🚀 Sending code_change:', { room_id: roomId, code_content: value, message_id: messageId });
+           
+           // Track this message ID to prevent echo loops
+           recentMessageIds.current.add(messageId);
+           
+           // Keep only the last 10 message IDs to prevent memory leaks
+           if (recentMessageIds.current.size > 10) {
+            const firstId = recentMessageIds.current.values().next().value;
+            recentMessageIds.current.delete(firstId);
+          }
+           
+          socketRef.current.emit('code_change', { 
+            room_id: roomId, 
+            code_content: value, 
+            message_id: messageId 
+          });
+           
+          // Also log the current socket state
+          console.log('Socket connected:', socketRef.current.connected);
+          console.log('Socket id:', socketRef.current.id);
+        } else {
+          console.error('❌ Socket not available!');
+        }
+      } else {
+        console.log('🔄 Skipping socket emission - value unchanged');
+      }
+    } else if (isUpdatingFromSocket.current) {
+      console.log('🔄 Skipping socket emission - updating from socket');
+    }
+  }, [roomId, code]);
+
+  // Function to handle editor mount
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    console.log('Editor mounted!');
+    editorRef.current = editor;
+    
+    // Set initial value
+    if (code) {
+      editor.setValue(code);
+    }
+    
+    // Configure editor options
+    editor.updateOptions({
+      minimap: { enabled: false },
+      fontSize: 12,
+      lineNumbers: 'on',
+      roundedSelection: false,
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      wordWrap: 'on',
+      theme: 'vs-dark'
+    });
+  }, []); // Remove code dependency to prevent remounting
+
+     // Function to update editor content from socket
+  const updateEditorContent = useCallback((newCode) => {
+    console.log('updateEditorContent called with:', newCode);
+    console.log('editorRef.current exists:', !!editorRef.current);
+    console.log('isUpdatingFromSocket.current:', isUpdatingFromSocket.current);
+     
+    if (editorRef.current) {
+       console.log('Updating editor content...');
+       
+      // Set flag BEFORE any editor operations to prevent onChange
+      isUpdatingFromSocket.current = true;
+       
+      // Get current cursor position before updating
+      const currentPosition = editorRef.current.getPosition();
+      const currentSelection = editorRef.current.getSelection();
+       
+       // Always update the content for perfect sync
+      const currentValue = editorRef.current.getValue();
+      if (currentValue !== newCode) {
+         // Use executeEdits with a special flag to prevent onChange
+         // This is the ONLY way to update content without triggering onChange
+        const model = editorRef.current.getModel();
+        if (model) {
+           // Create a single edit operation that replaces the entire content
+          const fullRange = model.getFullModelRange();
+          const edits = [{
+            range: fullRange,
+            text: newCode
+          }];
+           
+           // Apply the edit without triggering onChange
+          model.pushEditOperations([], edits, () => null);
+           
+                       // Update tracking variables to prevent duplicate emissions
+            lastSentCode.current = newCode;
+            lastReceivedCode.current = newCode;
+            console.log('🔄 Updated tracking variables to:', newCode.substring(0, 50) + '...');
+          } else {
+                       // Fallback to setValue if model is not available
+            editorRef.current.setValue(newCode);
+            lastSentCode.current = newCode;
+            lastReceivedCode.current = newCode;
+          }
+      }
+       
+       // Smart cursor position restoration
+      if (currentPosition) {
+        const lines = newCode.split('\n');
+        const targetLine = Math.min(currentPosition.lineNumber, lines.length);
+        const targetColumn = Math.min(currentPosition.column, lines[targetLine - 1]?.length || 1);
+         
+         // Restore cursor position
+        editorRef.current.setPosition({
+          lineNumber: targetLine,
+          column: targetColumn
+        });
+         
+         // Restore selection if it was a range
+         if (currentSelection && currentSelection.startLineNumber !== currentSelection.endLineNumber) {
+           const startLine = Math.min(currentSelection.startLineNumber, lines.length);
+           const endLine = Math.min(currentSelection.endLineNumber, lines.length);
+           
+           editorRef.current.setSelection({
+             startLineNumber: startLine,
+             startColumn: currentSelection.startColumn,
+             endLineNumber: endLine,
+             endColumn: currentSelection.endColumn
+           });
+         }
+       }
+       
+               // Reset the flag immediately after the update is complete
+        isUpdatingFromSocket.current = false;
+        console.log('🔄 Reset isUpdatingFromSocket flag');
+       console.log('Editor content updated successfully');
+     } else {
+       console.log('Editor not ready yet');
+     }
+   }, []);
+
+  // This primary useEffect handles the socket connection and its event listeners.
+  useEffect(() => {
+    // Check for authentication token
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      // Store the room ID to redirect after login
+      localStorage.setItem('pendingRoomJoin', roomId);
+      setIsCheckingAuth(false);
+      navigate('/auth');
+      return;
+    }
+
+    setIsCheckingAuth(false);
+    const socket = io('http://127.0.0.1:5001');
+    socketRef.current = socket;
+
+    // --- All Socket Event Listeners are defined here ---
+    socket.on('connect', () => {
+      console.log('Socket connected! Socket ID:', socket.id);
+      setStatus('Connected!');
+      
+      // Get authenticated user info and join room
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) {
+        // Get user info from token or make API call
+        // For now, we'll use a simple approach - you can enhance this later
+        const username = localStorage.getItem('username') || 'User';
+        
+        // Don't add current user immediately - wait for existing_users response
+        // This prevents duplicates and ensures we get the complete list
+        
+        // Join room with authenticated user
+        console.log('Joining room:', roomId, 'with username:', username); // Debug log
+        socket.emit('join_room', { room_id: roomId, username, authenticated: true });
+        
+        // Test socket connection immediately
+        console.log('Testing socket connection...');
+        socket.emit('code_change', { room_id: roomId, code_content: 'test from React' });
+        
+        // Also emit a test code_change to see if the room exists
+        setTimeout(() => {
+          console.log('Testing code_change for room:', roomId);
+          socket.emit('code_change', { room_id: roomId, code_content: 'test delayed' });
+        }, 1000);
+        
+        // Request existing users in the room
+        console.log('Requesting existing users for room:', roomId); // Debug log
+        socket.emit('request_existing_users', { room_id: roomId });
+        
+        // Fetch the initial state of the room
+        fetch(`http://127.0.0.1:5001/api/rooms/${roomId}`)
+          .then(res => res.json())
+          .then(data => {
+            console.log('Room data received:', data);
+            if (data.problem && data.problem.title) {
+              setProblem(data.problem);
+              setLanguage(data.language || 'python');
+              setView('coding');
+              setCode(data.problem.template_code || '');
+            } else {
+              setView('lobby');
+              // Fetch problems for lobby
+              fetch(`http://127.0.0.1:5001/api/problems`)
+                .then(res => res.json())
+                .then(setProblems);
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching room data:', error);
+          });
+      } else {
+        // This shouldn't happen due to ProtectedRoute, but just in case
+        setStatus('Authentication required');
+        navigate('/auth');
+      }
+    });
+
+    // Test event listeners
+    socket.on('connected', (data) => {
+      console.log('🎉 Received connected event:', data);
+    });
+
+    socket.on('test_response', (data) => {
+      console.log('🧪 Received test_response:', data);
+    });
+
+    socket.on('problem_loaded', (data) => {
+      setProblem(data.problem);
+      setLanguage(data.language || 'python');
+      setView('coding');
+      setCode(data.problem.template_code || '');
+    });
+
+    socket.on('lobby_activated', (data) => {
+      setView('lobby');
+      setProblem(null);
+      fetch(`http://127.0.0.1:5001/api/problems`)
+        .then(res => res.json())
+        .then(setProblems);
+    });
+
+         socket.on('code_update', (data) => {
+       // Always update from socket to ensure perfect sync
+       console.log('🎉 RECEIVED code_update event!');
+       console.log('Received code_update:', data);
+       console.log('Current code before update:', code);
+       console.log('New code from socket:', data.code_content);
+       
+       // Check if this is a message we sent (by checking message_id)
+       if (data.message_id && recentMessageIds.current.has(data.message_id)) {
+         console.log('🔄 Skipping update - this is a message we sent (ID:', data.message_id, ')');
+         return;
+       }
+       
+       // Additional safety check: don't update if this is the same content we just sent
+       if (data.code_content === lastSentCode.current) {
+         console.log('🔄 Skipping update - content matches what we just sent');
+         return;
+       }
+       
+       // Additional safety check: don't update if this is the same content we just received
+       if (data.code_content === lastReceivedCode.current) {
+         console.log('🔄 Skipping update - content matches what we just received');
+         return;
+       }
+       
+       // Additional safety check: don't update if we're already updating
+       if (isUpdatingFromSocket.current) {
+         console.log('🔄 Skipping update - already updating from socket');
+         return;
+       }
+       
+       // Additional safety check: prevent very rapid successive updates
+       const now = Date.now();
+       if (now - lastUpdateTime.current < 50) { // 50ms minimum between updates
+         console.log('🔄 Skipping update - too soon after last update');
+         return;
+       }
+       lastUpdateTime.current = now;
+       
+       console.log('Calling updateEditorContent...');
+       updateEditorContent(data.code_content);
+       console.log('updateEditorContent called');
+     });
+
+    // Test if we can receive any events
+    socket.on('connect_error', (error) => {
+      console.error('❌ Socket connection error:', error);
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('🔌 Socket disconnected:', reason);
+    });
+
+    socket.on('language_updated', (data) => {
+      setLanguage(data.language);
+    });
+
+    socket.on('execution_result', (result) => {
+      setOutput(result.error || result.output);
+    });
+
+    socket.on('submit_result', (result) => {
+      setOutput(`Verdict: ${result.verdict}\n\n${result.details}`);
+    });
+
+    // Handle user presence events
+    socket.on('user_joined', (data) => {
+      setStatus(`Connected! ${data.username} joined the room`);
+      // Only add user if they're not already in the list
+      setUsers(prev => {
+        const userExists = prev.some(user => user.username === data.username);
+        if (!userExists) {
+          return [...prev, data];
+        }
+        return prev;
+      });
+    });
+
+    socket.on('existing_users', (data) => {
+      console.log('Received existing_users event:', data); // Debug log
+      // Set the existing users list (this will include the current user and others)
+      setUsers(data.users || []);
+      setStatus(`Connected! Found ${data.users?.length || 0} users in room`);
+      setIsLoadingUsers(false); // Set loading to false after users are fetched
+    });
+
+    socket.on('user_left', (data) => {
+      console.log('Received user_left event:', data); // Debug log
+      setStatus(`Connected! ${data.username} left the room`);
+      setUsers(prev => {
+        console.log('Previous users:', prev); // Debug log
+        const filtered = prev.filter(user => user.username !== data.username);
+        console.log('Filtered users:', filtered); // Debug log
+        return filtered;
+      });
+    });
+
+    socket.on('session_ended', (data) => {
+      alert('The room session has ended. Redirecting to homepage...');
+      navigate('/');
+    });
+
+         // Cleanup function to disconnect the socket when the component is unmounted
+     return () => { 
+       socket.disconnect(); 
+     };
+  }, [roomId, navigate, updateEditorContent]);
+
+  const handleLoadProblem = (problemId) => {
+    socketRef.current.emit('load_problem', { room_id: roomId, problem_id: problemId });
+  };
+
+  const handleLanguageChange = (e) => {
+    const newLanguage = e.target.value;
+    setLanguage(newLanguage);
+    socketRef.current.emit('language_change', { room_id: roomId, language: newLanguage });
+  };
+  
+  const handleRunCode = () => {
+    setOutput('Executing...');
+    if (socketRef.current) {
+      socketRef.current.emit('execute_code', {
+        room_id: roomId,
+        language: language,
+        code: code,
+      });
+    }
+  };
+
+  const handleSubmitCode = () => {
+    setOutput('Submitting for judging...');
+    if (socketRef.current) {
+      socketRef.current.emit('submit_code', {
+        room_id: roomId,
+        language: language,
+        code: code,
+      });
+    }
+  };
+
+  return (
+    <>
+      {/* Show loading screen while checking authentication */}
+      {isCheckingAuth && (
+        <div className="flex h-screen bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 text-white">
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400 mx-auto mb-4"></div>
+              <h2 className="text-2xl font-bold text-indigo-300 mb-2">Checking Authentication</h2>
+              <p className="text-gray-400">Please wait while we verify your access...</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Main room content - only show when not checking auth */}
+      {!isCheckingAuth && (
+        <Layout
+          sidebarContent={
+            <div className="flex flex-col h-full">
+              <div className="p-4 space-y-6">
+                {/* Room Info */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Room Info</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs text-gray-500">Room ID</p>
+                      <div className="font-mono text-sm bg-gray-800 px-3 py-2 rounded-lg text-indigo-300">{roomId}</div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      <div className="text-green-400 text-sm font-medium">{status}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Quick Actions</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/room/${roomId}`);
+                        alert('Invite link copied!');
+                      }}
+                      className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
+                    >
+                      📋 Copy Invite Link
+                    </button>
+                                         <button
+                       onClick={() => {
+                         if (socketRef.current) {
+                           socketRef.current.disconnect();
+                           setStatus('Disconnected');
+                         }
+                       }}
+                       className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
+                     >
+                       🔌 Disconnect
+                     </button>
+                     
+                     <button
+                       onClick={() => {
+                         if (socketRef.current) {
+                           console.log('🧪 Testing socket connection...');
+                           socketRef.current.emit('test_message', { 
+                             room_id: roomId, 
+                             message: 'Test from React frontend' 
+                           });
+                         }
+                       }}
+                       className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
+                     >
+                       🧪 Test Socket
+                     </button>
+                     
+                     <button
+                       onClick={() => {
+                         console.log('🧪 Testing HTTP endpoint...');
+                         fetch('http://127.0.0.1:5001/api/test-socket', {
+                           method: 'POST',
+                           headers: {
+                             'Content-Type': 'application/json',
+                           },
+                           body: JSON.stringify({
+                             room_id: roomId,
+                             message: 'Test from HTTP endpoint'
+                           })
+                         })
+                         .then(res => res.json())
+                         .then(data => {
+                           console.log('🧪 HTTP test response:', data);
+                         })
+                         .catch(error => {
+                           console.error('🧪 HTTP test error:', error);
+                         });
+                       }}
+                       className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
+                     >
+                       🧪 Test HTTP
+                     </button>
+                  </div>
+                </div>
+
+                {/* Users in Room */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Active Users</h3>
+                  {isLoadingUsers ? (
+                    <div className="text-gray-400 text-sm">Loading users...</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {users.length === 0 ? (
+                        <p className="text-gray-400 text-sm">Just you</p>
+                      ) : (
+                        users.map((user, index) => (
+                          <div key={index} className="flex items-center gap-3 p-2 rounded-lg bg-gray-800">
+                            <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                            <span className="text-sm text-gray-300">{user.username}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="mt-auto p-4 border-t border-gray-800 space-y-3">
+                <button
+                  onClick={() => {
+                    if (socketRef.current) {
+                      const username = localStorage.getItem('username') || 'User';
+                      socketRef.current.emit('leave_room', { room_id: roomId, username });
+                    }
+                    navigate('/');
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                >
+                  🏠 Leave Room
+                </button>
+                
+                <button
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to end this session? This will close the room for all users.')) {
+                      if (socketRef.current) {
+                        socketRef.current.emit('end_session', { room_id: roomId });
+                      }
+                      navigate('/');
+                    }
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                >
+                  🚪 End Session
+                </button>
+              </div>
+            </div>
+          }
+        >
+                     <div className="flex flex-col h-full p-4">
+             {view === 'lobby' && (
+               <div className="w-full max-w-2xl mx-auto bg-gray-900 rounded-xl shadow-2xl p-6 flex flex-col items-center justify-center h-full">
+                 <h2 className="text-3xl font-bold mb-4 text-indigo-300">Choose a Problem</h2>
+                 <div className="w-full space-y-2">
+                   {problems.map(p => (
+                     <div
+                       key={p.id}
+                       onClick={() => handleLoadProblem(p.id)}
+                       className="p-3 rounded-xl bg-gray-800 hover:bg-indigo-600 cursor-pointer text-base font-semibold transition-all duration-150 shadow hover:scale-105"
+                     >
+                       {p.title}
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             )}
+
+             {view === 'coding' && (
+               <div className="w-full h-full grid grid-cols-1 lg:grid-cols-2 gap-3">
+                 {/* Problem Description - Left Side */}
+                 <div className="bg-gray-900 rounded-xl shadow-xl p-3 flex flex-col h-full">
+                   <h2 className="text-lg font-bold mb-2 text-indigo-300">{problem?.title}</h2>
+                   <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-line flex-1">
+                     {problem?.description}
+                   </div>
+                 </div>
+                 
+                 {/* Code Editor - Right Side */}
+                 <div className="flex flex-col h-full gap-2">
+                   <div className="bg-gray-900 rounded-xl shadow-xl p-2 flex flex-col flex-1">
+                     <div className="flex items-center mb-2 gap-2">
+                       <label htmlFor="languageSelector" className="text-xs font-medium text-gray-400">Language:</label>
+                       <select id="languageSelector" value={language} onChange={handleLanguageChange} className="bg-gray-800 text-white rounded-lg px-1 py-0.5 text-xs">
+                         <option value="python">Python</option>
+                         <option value="cpp">C++</option>
+                         <option value="java">Java</option>
+                       </select>
+                     </div>
+                     <div className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden">
+                       <Editor
+                         height="100%"
+                         defaultLanguage={getMonacoLanguage(language)}
+                         language={getMonacoLanguage(language)}
+                         value={code}
+                         onChange={handleEditorChange}
+                         onMount={handleEditorDidMount}
+                         options={{
+                           minimap: { enabled: false },
+                           fontSize: 12,
+                           lineNumbers: 'on',
+                           roundedSelection: false,
+                           scrollBeyondLastLine: false,
+                           automaticLayout: true,
+                           wordWrap: 'on',
+                           theme: 'vs-dark',
+                           readOnly: false
+                         }}
+                       />
+                     </div>
+                     <div className="flex items-center gap-2 mt-2">
+                       <button onClick={handleRunCode} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-lg transition-all duration-150 text-xs">Run Code</button>
+                       <button onClick={handleSubmitCode} className="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-lg transition-all duration-150 text-xs">Submit Code</button>
+                     </div>
+                   </div>
+                   
+                   {/* Output Section */}
+                   <div className="bg-gray-900 rounded-xl shadow-xl p-2 h-32">
+                     <h3 className="text-sm font-bold text-gray-200 mb-1">Output</h3>
+                     <pre className="w-full h-24 bg-gray-950 text-green-400 font-mono p-2 rounded-xl border border-gray-800 whitespace-pre-wrap text-xs">{output}</pre>
+                   </div>
+                 </div>
+               </div>
+             )}
+          </div>
+        </Layout>
+      )}
+    </>
+  );
+};
+
+export default RoomPage;
