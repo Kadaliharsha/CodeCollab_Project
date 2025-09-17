@@ -11,6 +11,9 @@ const Layout = ({
 }) => {
   const navigate = useNavigate();
   const username = getUsername();
+  
+  // Debug: Log username to console
+  console.log('Layout - Current username:', username);
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 text-white">
@@ -28,7 +31,7 @@ const Layout = ({
         <div className="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">CodeCollab</h2>
           <div className="flex items-center gap-3">
-            {username && <span className="text-sm text-gray-400">{username}</span>}
+            <span className="text-sm text-gray-400">Welcome, {username}</span>
             <button
               onClick={() => { clearToken(); navigate('/auth'); }}
               className="px-3 py-1.5 text-sm bg-gray-700 border border-gray-600 rounded hover:bg-gray-650"

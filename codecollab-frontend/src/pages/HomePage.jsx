@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getUsername, getToken } from '../utils/auth';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -9,12 +10,12 @@ function HomePage() {
 
   // Check authentication status on component mount
   useEffect(() => {
-    const authToken = localStorage.getItem('authToken');
+    const authToken = getToken();
     if (authToken) {
       // For now, just check if token exists
       // We can add token validation later when the backend endpoint is ready
       setIsAuthenticated(true);
-      const username = localStorage.getItem('username') || 'User';
+      const username = getUsername() || 'User';
       setUser({ username }); // Use actual username from localStorage
       
       // TODO: Uncomment this when the backend endpoint is ready
@@ -40,6 +41,7 @@ function HomePage() {
       } else {
         // Token is invalid, remove it
         localStorage.removeItem('authToken');
+        sessionStorage.removeItem('authToken');
         setIsAuthenticated(false);
         setUser(null);
       }
@@ -61,7 +63,7 @@ function HomePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${getToken()}`
         }
       });
 
@@ -70,6 +72,7 @@ function HomePage() {
         if (response.status === 401 || response.status === 422) {
           alert('Your session has expired. Please log in again.');
           localStorage.removeItem('authToken');
+          sessionStorage.removeItem('authToken');
           setIsAuthenticated(false);
           setUser(null);
           navigate('/auth');
@@ -113,6 +116,7 @@ function HomePage() {
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
+    sessionStorage.removeItem('authToken');
     localStorage.removeItem('username'); // Also clear username
     setIsAuthenticated(false);
     setUser(null);

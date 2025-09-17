@@ -8,10 +8,27 @@ export const getToken = () =>
   export const clearToken = () => {
     localStorage.removeItem('authToken');
     sessionStorage.removeItem('authToken');
+    localStorage.removeItem('username');
+    // Clear any conflicting auth keys
+    localStorage.removeItem('userId');
+    localStorage.removeItem('useremail');
+    localStorage.removeItem('role');
   };
   
-  export const getUsername = () => localStorage.getItem('username') || '';
-  export const setUsername = (u) => localStorage.setItem('username', u);
+  export const getUsername = () => {
+    return localStorage.getItem('username') || 'User';
+  };
+  export const setUsername = (u) => {
+    // Clear any potentially conflicting keys first
+    const conflictingKeys = ['userId', 'useremail', 'role', 'user'];
+    conflictingKeys.forEach(key => {
+      if (localStorage.getItem(key)) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    localStorage.setItem('username', u);
+  };
   
   export const authFetch = async (url, options = {}) => {
     const token = getToken();

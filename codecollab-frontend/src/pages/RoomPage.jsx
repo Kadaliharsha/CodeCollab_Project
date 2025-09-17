@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import Editor from '@monaco-editor/react';
 import Layout from '../components/Layout';
+import { getUsername } from '../utils/auth';
 
 const RoomPage = () => {
   const { roomId } = useParams();
@@ -239,7 +240,7 @@ const RoomPage = () => {
       if (authToken) {
         // Get user info from token or make API call
         // For now, we'll use a simple approach - you can enhance this later
-        const username = localStorage.getItem('username') || 'User';
+        const username = getUsername() || 'User';
         
         // Don't add current user immediately - wait for existing_users response
         // This prevents duplicates and ensures we get the complete list
@@ -585,7 +586,7 @@ const RoomPage = () => {
                 <button
                   onClick={() => {
                     if (socketRef.current) {
-                      const username = localStorage.getItem('username') || 'User';
+                      const username = getUsername() || 'User';
                       socketRef.current.emit('leave_room', { room_id: roomId, username });
                     }
                     navigate('/');

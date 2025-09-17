@@ -6,7 +6,7 @@ import { setToken, setUsername, getToken } from '../utils/auth';
 function AuthPage() {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
+  const [username, setUsernameState] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,6 +33,7 @@ function AuthPage() {
   
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('Form submitted with:', { username, password, isLogin });
     setError('');
     if (!validate()) return;
 
@@ -50,13 +51,20 @@ function AuthPage() {
     
     try {
       setIsLoading(true);
+      console.log('Making request to:', `http://127.0.0.1:5001${endpoint}`);
+      console.log('Request body:', JSON.stringify({ username, password }));
+      
       const response = await fetch(`http://127.0.0.1:5001${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
       const data = await response.json();
+      console.log('Auth response data:', data);
 
       if (!response.ok) {
         setError(data.error || data.message || 'Authentication failed.');
@@ -64,23 +72,30 @@ function AuthPage() {
       }
 
       if (isLogin) {
-
+        console.log('Login success block reached!');
+        console.log('Data received:', data);
+        
         // If login is successful, save the token and username
         setToken(data.access_token, rememberMe);
-        setUsername(username);
+        setUsername(data.username || username);
         
         // Check if there's a pending room join
         if (pendingRoomJoin) {
           localStorage.removeItem('pendingRoomJoin');
+          console.log('Navigating to room:', pendingRoomJoin);
           navigate(`/room/${pendingRoomJoin}`);
         } else {
           // Go to homepage if no pending room join
-          navigate('/');
+          console.log('Navigating to home page');
+          // Add a small delay to ensure localStorage is updated
+          setTimeout(() => {
+            navigate('/');
+          }, 100);
         }
       } else {
         // If signup is successful, save the token and username
         setToken(data.access_token, rememberMe);
-        setUsername(username);
+        setUsername(data.username || username);
         
         // Check if there's a pending room join
         if (pendingRoomJoin) {
@@ -88,7 +103,10 @@ function AuthPage() {
           navigate(`/room/${pendingRoomJoin}`);
         } else {
           // Go to homepage if no pending room join
-          navigate('/');
+          // Add a small delay to ensure localStorage is updated
+          setTimeout(() => {
+            navigate('/');
+          }, 100);
         }
       }
 
@@ -143,7 +161,7 @@ function AuthPage() {
             type="text"
             value={username}
             onChange={(e) => {
-              setUsername(e.target.value);
+              setUsernameState(e.target.value);
               if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
             }}
             aria-invalid={!!fieldErrors.username}
