@@ -1,9 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+// Debounce utility
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import Editor from '@monaco-editor/react';
 import Layout from '../components/Layout';
-import { getUsername } from '../utils/auth';
+import { getUsername, getToken } from '../utils/auth';
 
 const RoomPage = () => {
   const { roomId } = useParams();
@@ -20,7 +28,7 @@ const RoomPage = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [users, setUsers] = useState([]); // Track users in room
   const [isLoadingUsers, setIsLoadingUsers] = useState(true); // Track if users are loading
-  
+  const [typingUsers, setTypingUsers] = useState({}); // Track users who are typing
      // Refs for instances that shouldn't trigger re-renders
   const socketRef = useRef(null);
   const editorRef = useRef(null);
@@ -42,7 +50,11 @@ const RoomPage = () => {
   };
 
      // Function to handle editor changes
-  const handleEditorChange = useCallback((value, event) => {
+  // Debounced socket emission for code changes
+  const debouncedEmitRef = useRef();
+
+  // The actual function to emit code_change
+  const emitCodeChange = useCallback((value) => {
      // Only send socket events if we're not currently updating from a socket
     if (!isUpdatingFromSocket.current && value !== undefined) {
        // Additional check: don't send if the value is the same as current code
@@ -110,6 +122,39 @@ const RoomPage = () => {
       console.log('🔄 Skipping socket emission - updating from socket');
     }
   }, [roomId, code]);
+
+  // Debounced version of emitCodeChange
+  useEffect(() => {
+    debouncedEmitRef.current = debounce(emitCodeChange, 100); // 100ms debounce
+  }, [emitCodeChange]);
+
+
+
+  // Typing indicator state
+  const typingTimeoutRef = useRef();
+  const username = getUsername() || 'User';
+
+  // Debounced function to emit 'typing: false' after pause
+  const emitTypingStopped = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.emit('typing', { room_id: roomId, username, typing: false });
+    }
+  }, [roomId, username]);
+
+  // Main editor change handler (calls debounced emit and typing event)
+  const handleEditorChange = useCallback((value, event) => {
+    // Emit typing: true immediately
+    if (socketRef.current) {
+      socketRef.current.emit('typing', { room_id: roomId, username, typing: true });
+    }
+    // Reset typing stopped debounce
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(emitTypingStopped, 1000); // 1s pause
+    // Debounced code change
+    if (debouncedEmitRef.current) {
+      debouncedEmitRef.current(value);
+    }
+  }, [emitTypingStopped, username]);
 
   // Function to handle editor mount
   const handleEditorDidMount = useCallback((editor, monaco) => {
@@ -217,7 +262,7 @@ const RoomPage = () => {
   // This primary useEffect handles the socket connection and its event listeners.
   useEffect(() => {
     // Check for authentication token
-    const token = localStorage.getItem('authToken');
+    const token = getToken();
     if (!token) {
       // Store the room ID to redirect after login
       localStorage.setItem('pendingRoomJoin', roomId);
@@ -236,7 +281,7 @@ const RoomPage = () => {
       setStatus('Connected!');
       
       // Get authenticated user info and join room
-      const authToken = localStorage.getItem('authToken');
+      const authToken = getToken();
       if (authToken) {
         // Get user info from token or make API call
         // For now, we'll use a simple approach - you can enhance this later
@@ -417,12 +462,22 @@ const RoomPage = () => {
       navigate('/');
     });
 
-         // Cleanup function to disconnect the socket when the component is unmounted
-     return () => { 
-       socket.disconnect(); 
-     };
+    socket.off('typing');
+    socket.on('typing', ({ username: typingUser, typing }) => {
+      setTypingUsers(prev => ({
+        ...prev,
+        [typingUser]: typing
+      }));
+    });
+
+    // Cleanup function to disconnect the socket when the component is unmounted
+    return () => {
+      socket.disconnect();
+    };
   }, [roomId, navigate, updateEditorContent]);
 
+
+  // Function to handle problem selection from lobby
   const handleLoadProblem = (problemId) => {
     socketRef.current.emit('load_problem', { room_id: roomId, problem_id: problemId });
   };
@@ -613,7 +668,7 @@ const RoomPage = () => {
             </div>
           }
         >
-                     <div className="flex flex-col h-full p-4">
+            <div className="flex flex-col h-full p-4">
              {view === 'lobby' && (
                <div className="w-full max-w-2xl mx-auto bg-gray-900 rounded-xl shadow-2xl p-6 flex flex-col items-center justify-center h-full">
                  <h2 className="text-3xl font-bold mb-4 text-indigo-300">Choose a Problem</h2>
@@ -640,7 +695,17 @@ const RoomPage = () => {
                      {problem?.description}
                    </div>
                  </div>
-                 
+                
+                <div className="mb-2">
+                  {Object.entries(typingUsers)
+                    .filter(([user, isTyping]) => isTyping && user !== username)
+                    .map(([user]) => (
+                      <span key={user} className="text-xs text-gray-400 italic mr-2">
+                        {user} is typing...
+                      </span>
+                    ))}
+                </div>
+
                  {/* Code Editor - Right Side */}
                  <div className="flex flex-col h-full gap-2">
                    <div className="bg-gray-900 rounded-xl shadow-xl p-2 flex flex-col flex-1">
