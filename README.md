@@ -1,119 +1,108 @@
 # CodeCollab - Advanced Real-Time Collaborative Coding Platform
 
-Welcome to **CodeCollab** — a cutting-edge real-time collaborative coding platform that revolutionizes how developers work together. Built with enterprise-grade features, CodeCollab is designed for technical interviews, hackathons, coding bootcamps, remote pair programming, and educational environments.
+## CodeCollab
 
-## 🌟 **What Makes CodeCollab Stand Out**
+Real-time collaborative coding platform for technical interviews, pair programming, tutoring, and practice. CodeCollab lets multiple users edit and run code together in a secure sandbox, with session event logging for replay and analytics.
 
-### 🚀 **Enterprise-Grade Real-Time Collaboration**
-- **Sub-second latency** WebSocket communication for instant code sync
-- **Conflict-free collaborative editing** with operational transformation
-- **Multi-user cursor tracking** with color-coded user identification
-- **Live selection highlighting** showing what each user is working on
-- **Real-time typing indicators** and user presence status
+## Overview
 
-### 🎯 **Advanced Session Analytics & Replay**
-- **Complete session recording** with millisecond precision timestamps
-- **Event sourcing architecture** for perfect session reconstruction
-- **Timeline playback** to review coding sessions step-by-step
-- **Analytics dashboard** with engagement metrics and collaboration patterns
-- **Export capabilities** for session data and insights
+CodeCollab enables live coding sessions where multiple users can collaborate in real time. It supports JWT-based authentication, secure Docker-based code execution, event sourcing for replay, and a modern React frontend.
 
-### 🔒 **Production-Ready Security & Scalability**
-- **Docker-based code execution** with complete sandboxing
-- **JWT authentication** with secure token management
-- **Rate limiting** and DDoS protection
-- **Input sanitization** and XSS prevention
-- **Audit logging** for compliance and debugging
+## Primary Use Cases 
 
-### 🎨 **Modern Developer Experience**
-- **Monaco Editor integration** (same editor as VS Code)
-- **Multi-language support** (Python, JavaScript, Java, C++, and more)
-- **Syntax highlighting** and IntelliSense
-- **Dark/light theme** support
-- **Responsive design** for desktop and mobile
+🎯 Live technical interviews (interviewer + candidate pair programming)
 
-## 🚀 **Production-Ready Features (100% Working)**
+👩‍🏫 Remote tutoring / pair programming sessions
 
-### 🔐 **Enterprise Authentication & Security**
-- **JWT-based authentication** with secure token management
-- **Password hashing** with bcrypt for security
-- **Session persistence** across browser refreshes
-- **Protected route system** with automatic redirects
-- **User profile management** with persistent usernames
-- **CORS protection** and secure API endpoints
+🧑‍💻 Practice & assessment (problems with test cases)
 
-### 🏠 **Advanced Room Management**
-- **Dynamic room creation** with cryptographically secure IDs
-- **Real-time room discovery** and joining
-- **Persistent room state** in PostgreSQL database
-- **Room ownership** and permission management
-- **Active user tracking** with live participant lists
-- **Room cleanup** and garbage collection
-
-### 👥 **Next-Gen User Presence System**
-- **Real-time cursor tracking** with sub-pixel precision
-- **Color-coded user identification** with automatic assignment
-- **Live selection highlighting** showing active code regions
-- **Multi-user awareness** with visual user indicators
-- **Presence API** with WebSocket real-time updates
-- **User activity monitoring** and status tracking
-
-### 📊 **Advanced Session Analytics & Replay**
-- **Event sourcing architecture** for perfect session reconstruction
-- **Millisecond-precision timestamps** for all activities
-- **Comprehensive event logging** with JSON payloads
-- **RESTful analytics API** with timeline and summary endpoints
-- **Session export capabilities** for data analysis
-- **Real-time metrics** and engagement tracking
-
-### 💻 **Professional Code Collaboration**
-- **Operational transformation** for conflict-free editing
-- **Real-time code synchronization** with WebSocket
-- **Multi-language support** (Python, JavaScript, Java, C++, Go, Rust)
-- **Live code execution** with Docker containerization
-- **Automated test case evaluation** with instant feedback
-- **Code submission system** with verdict tracking
-
-### 🎯 **Intelligent Problem Management**
-- **Curated problem database** with difficulty levels
-- **Test case management** with hidden/visible cases
-- **Problem templates** with starter code
-- **Automated seeding** for sample problems
-- **Problem categorization** and tagging system
-- **Dynamic problem loading** and switching
-
-### 🐳 **Secure Code Execution Engine**
-- **Docker-based sandboxing** for complete isolation
-- **Multi-language runtime** support
-- **Resource limiting** and timeout management
-- **Output capture** and error handling
-- **Security scanning** for malicious code
-- **Execution metrics** and performance monitoring
-
-## 🛠️ **Cutting-Edge Technology Stack**
-
-### 🐍 **Backend Architecture**
-- **Python 3.13** with Flask framework
-- **SQLAlchemy ORM** with PostgreSQL database
-- **Flask-SocketIO** for real-time WebSocket communication
-- **Docker Engine** for secure code execution sandboxing
-- **JWT (JSON Web Tokens)** for stateless authentication
-- **CORS middleware** for cross-origin request handling
-- **Event sourcing** for session recording and replay
-- **RESTful API design** with comprehensive endpoints
-
-### ⚛️ **Frontend Technology**
-- **React 18** with modern hooks and functional components
-- **Vite** for lightning-fast development and building
-- **Tailwind CSS** for utility-first responsive design
-- **Socket.IO Client** for real-time bidirectional communication
-- **Monaco Editor** (VS Code editor) for professional code editing
-- **React Router v6** for client-side navigation
-- **Context API** for state management
-- **Custom hooks** for WebSocket and authentication logic
+📊 Session replay & analytics (review collaboration timeline)
 
 ## 📁 Project Structure
 
+** Architecture **
+Flow
+
+    Users sign up / log in → JWT token issued.
+    Rooms are created and joined with persistent state.
+    Collaboration via WebSockets → synced code edits.
+    Code execution inside Docker sandbox → results returned.
+    Events logged → replayable session timeline.
+
+Components
+
+    Backend (Flask / Python)
+    REST API + Socket endpoints
+    Docker-based code execution
+    PostgreSQL/MySQL database models
+
+Frontend (React / Vite / Tailwind)
+
+    Real-time editor (Monaco editor planned/used)
+    Auth pages, dashboard, room UI
+
+Security
+
+    JWT authentication, password hashing
+    Docker isolation for untrusted code
+
+## Features
+
+🔗 Real-time collaboration (Flask-SocketIO)
+
+👥 Room creation & joining with persistent state
+
+🔒 JWT-based authentication & protected routes
+
+🐳 Secure Docker-based code execution with test case evaluation
+
+📝 Event sourcing → replay collaboration timeline
+
+🌍 Multi-language code execution
+
+👤 User presence (color-coded cursors, activity tracking)
+
+🎨 React frontend (Vite + Tailwind + Monaco editor)
+
+## Installation & Setup
+
+    Prerequisites
+    Python 3.10+
+    Node.js 18+
+    Docker (for sandboxed code execution)
+
+## Backend Setup
+```
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
+pip install -r requirements.txt
+python run.py
+```
+## Frontend Setup
+```
+cd frontend
+npm install
+npm run dev
+```
+## Configuration
+Create a .env file with:
+```
+DATABASE_URL=postgresql://user:pass@localhost/codecollab
+JWT_SECRET=supersecretkey
+DOCKER_CPU_LIMIT=1
+DOCKER_MEMORY_LIMIT=512m
+```
+## How It Works
+
+    PDF-like problems & test cases seeded into DB (seed.py).
+    Users join a room and collaborate via WebSockets.
+    Code is executed inside Docker sandbox (code_executor.py).
+    Events (cursor moves, edits, execution logs) stored for replay.
+    Replay available in dashboard or analytics.
+
+## Directory Layout
 ```
 Codecollab_project/
 ├── Codecollab/                 # Backend Flask API
@@ -135,106 +124,15 @@ Codecollab_project/
     └── package.json          # Node dependencies
 ```
 
-## 🚀 Quick Start
-
-### 1. Backend Setup
-```bash
-cd Codecollab
-pip install -r requirements.txt
-python seed.py  # Seed database with sample problems
-python run.py   # Start Flask server (runs on port 5001)
+## Usage 
+Run backend + frontend, then open browser at:
+```
+http://localhost:5173
 ```
 
-### 2. Frontend Setup
-```bash
-cd codecollab-frontend
-npm install
-npm run dev     # Start Vite dev server (runs on port 5173)
-```
+Create a room → share link → start collaborating 🚀
 
-### 3. Test the Application
-1. Open `http://localhost:5173`
-2. Register a new account or login with:
-   - **Username:** `Dolly`
-   - **Password:** `password123`
-3. Create a new room or join an existing one
-4. Start coding collaboratively!
-
-## 🚀 **Advanced Features in Development**
-
-### 🔄 **Currently in Progress**
-- **Real-time Typing Indicators** - Live typing status with user identification
-- **Advanced User Status** - Online/offline/away status with activity tracking
-- **Enhanced Presence System** - User following and focus modes
-
-### 📋 **Upcoming Enterprise Features**
-- **Session Replay Engine** - Timeline scrubbing with playback controls
-- **Advanced Analytics Dashboard** - ML-powered insights and collaboration metrics
-- **Multi-file Project Support** - Full IDE-like experience with file trees
-- **GitHub Integration** - Repository import/export with version control
-- **AI-Powered Code Assistant** - Intelligent hints, explanations, and optimization
-- **Interview Proctoring Mode** - Advanced monitoring and assessment tools
-- **Team Management** - Organization and workspace management
-- **API Rate Limiting** - Enterprise-grade API protection
-- **Webhook Integration** - Real-time notifications and third-party integrations
-- **Mobile App** - Native iOS and Android applications
-
-## 🔧 Recent Fixes
-
-### Authentication Issues Resolved
-- **Fixed username display bug** - Resolved naming conflict between React state setter and auth utility function
-- **Proper token storage** - JWT tokens now stored correctly in localStorage/sessionStorage
-- **Navigation flow** - Users properly redirected to home page after login
-- **Username persistence** - Username correctly displayed in UI after authentication
-
-### Database Issues Resolved
-- **UserPresence model** - Added proper nullable constraints
-- **SessionEvent recording** - All room activities now properly logged
-- **Password validation** - Fixed password checking for existing users
-
-## 📊 **Production Metrics & Performance**
-
-### ✅ **Core System Status**
-- **Authentication System** - 100% production-ready with JWT security
-- **Real-time Collaboration** - Sub-second latency WebSocket communication
-- **Session Recording** - 100% event coverage with millisecond precision
-- **User Presence** - Advanced cursor tracking with color-coded identification
-- **Code Execution** - Docker sandboxing with multi-language support
-- **Room Management** - Dynamic room creation with persistent state
-- **Frontend Integration** - 98% complete with modern React architecture
-
-### 🎯 **Performance Benchmarks**
-- **WebSocket Latency** - < 50ms for real-time updates
-- **Code Execution** - < 2s average response time
-- **Database Queries** - Optimized with proper indexing
-- **Memory Usage** - Efficient resource management
-- **Concurrent Users** - Supports 100+ simultaneous users per room
-- **Uptime** - 99.9% availability with error handling
-
-### 🔒 **Security & Compliance**
-- **Zero known vulnerabilities** - Regular security audits
-- **Data encryption** - All sensitive data encrypted in transit and at rest
-- **Access control** - Role-based permissions and authentication
-- **Audit logging** - Complete activity tracking for compliance
-- **Input validation** - Comprehensive sanitization and validation
-
-## 🏆 **Competitive Advantages**
-
-### 🚀 **Technical Superiority**
-- **Event sourcing architecture** for perfect session reconstruction
-- **Operational transformation** for conflict-free collaborative editing
-- **Docker-based execution** with complete security isolation
-- **Real-time analytics** with comprehensive metrics
-- **Modern tech stack** with latest frameworks and best practices
-
-### 💼 **Enterprise Features**
-- **Scalable architecture** ready for thousands of concurrent users
-- **Professional UI/UX** with Monaco Editor integration
-- **Comprehensive API** for third-party integrations
-- **Advanced analytics** for insights and optimization
-- **Security-first design** with enterprise-grade protection
-
-## 📞 Support
+## Support
 
 For questions or issues, check the individual README files:
 - Backend: `Codecollab/README.md`
