@@ -54,7 +54,8 @@ def presence_to_dict(p):
 def broadcast_room_presence(room_id):
     presences = UserPresence.query.filter_by(room_id=room_id).all()
     payload = [presence_to_dict(p) for p in presences]
-    emit('presence_snapshot', {"room_id": room_id, "users": payload}, to=room_id)    
+    emit('presence_snapshot', {"room_id": room_id, "users": payload}, to=room_id)
+    
 # ... (Authentication and other routes remain the same) ...
 def generate_room_id():
     return str(uuid.uuid4().hex)[:8]
@@ -134,13 +135,18 @@ def reset_password():
 @jwt_required()
 def create_room():
     current_user_id = get_jwt_identity()
+    # Ensure the JWT identity matches the DB column type (Integer)
+    try:
+        current_user_id_int = int(current_user_id) if current_user_id is not None else None
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid user identity in token"}), 400
     room_id = generate_room_id()
     new_room = Room()
     new_room.id = room_id
-    new_room.created_by = current_user_id
+    new_room.created_by = current_user_id_int
     db.session.add(new_room)
     db.session.commit()
-    record_event(room_id, "create_room", {"created_by": current_user_id})
+    record_event(room_id, "create_room", {"created_by": current_user_id_int})
     return jsonify({"message": "Room created", "room_id": room_id}), 201
 
 @bp.route('/rooms/<string:room_id>', methods=['GET'])
@@ -284,6 +290,52 @@ def handle_request_existing_users(data):
     presences = UserPresence.query.filter_by(room_id=room_id).all()
     users_in_room = [{'id': i, 'username': p.username, 'color': p.user_color} for i, p in enumerate(presences)]
     emit('existing_users', {'users': users_in_room})
+
+@socketio.on('user_cursor_update')
+def handle_user_cursor_update(data):
+    room_id = data.get('room_id')
+    username = data.get('username')
+    position = data.get('position')
+    selection = data.get('selection')
+    
+    # Update user's cursor and selection in the database
+    updates = {}
+    if position:
+        updates.update({
+            'cursor_line': position['lineNumber'],
+            'cursor_column': position['column']
+        })
+        # Emit cursor position separately to maintain compatibility
+        emit('presence_cursor', {
+            'username': username, 
+            'cursor': {
+                'line': position['lineNumber'], 
+                'column': position['column']
+            }
+        }, to=room_id, include_self=False)
+    
+    if selection:
+        updates.update({
+            'selection_start_line': selection['startLineNumber'],
+            'selection_start_column': selection['startColumn'],
+            'selection_end_line': selection['endLineNumber'],
+            'selection_end_column': selection['endColumn']
+        })
+        # Emit selection separately to maintain compatibility
+        emit('presence_selection', {
+            'username': username,
+            'start': {
+                'line': selection['startLineNumber'],
+                'column': selection['startColumn']
+            },
+            'end': {
+                'line': selection['endLineNumber'],
+                'column': selection['endColumn']
+            }
+        }, to=room_id, include_self=False)
+    
+    if updates:
+        presence = upsert_presence(room_id, username, updates)
 
 @socketio.on('code_change')
 def handle_code_change(data):

@@ -12,6 +12,8 @@ import { io } from 'socket.io-client';
 import Editor from '@monaco-editor/react';
 import Layout from '../components/Layout';
 import { getUsername, getToken } from '../utils/auth';
+import UserPresence from '../components/UserPresence';
+import '../components/UserPresence.css';
 
 const RoomPage = () => {
   const { roomId } = useParams();
@@ -82,14 +84,14 @@ const RoomPage = () => {
           return;
         }
          
-                 // Only update state if it's actually different
+        // Only update state if it's actually different
         if (value !== code) {
           setCode(value);
         }
         lastSentCode.current = value; // Track what we just sent
         console.log('🔄 Updated lastSentCode in handleEditorChange to:', value.substring(0, 50) + '...');
          
-                          // Immediate socket emission for better real-time sync
+        // Immediate socket emission for better real-time sync
         if (socketRef.current) {
           const messageId = ++messageIdCounter.current;
            console.log('🚀 Sending code_change:', { room_id: roomId, code_content: value, message_id: messageId });
@@ -717,7 +719,7 @@ const RoomPage = () => {
                          <option value="java">Java</option>
                        </select>
                      </div>
-                     <div className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden">
+                     <div className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden relative">
                        <Editor
                          height="100%"
                          defaultLanguage={getMonacoLanguage(language)}
@@ -737,6 +739,20 @@ const RoomPage = () => {
                            readOnly: false
                          }}
                        />
+                       {editorRef.current && socketRef.current && (
+                         <UserPresence 
+                           editor={editorRef.current}
+                           socket={socketRef.current}
+                           roomId={roomId}
+                         />
+                       )}
+                       {editorRef.current && socketRef.current && (
+                         <UserPresence
+                           editor={editorRef.current}
+                           socket={socketRef.current}
+                           roomId={roomId}
+                         />
+                       )}
                      </div>
                      <div className="flex items-center gap-2 mt-2">
                        <button onClick={handleRunCode} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-lg transition-all duration-150 text-xs">Run Code</button>
