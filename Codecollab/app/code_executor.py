@@ -1,4 +1,5 @@
 import docker
+from docker import errors as docker_errors
 import base64
 
 def run_code(user_code, language, test_input_args=""):
@@ -47,7 +48,6 @@ except Exception as e:
         command = f"/bin/sh -c \"echo {encoded_script} | base64 -d > Main.java && javac Main.java && java Main\""
     else:
         return "", "Unsupported language"
-
     try:
         container = client.containers.run(
             image_name,
@@ -59,10 +59,10 @@ except Exception as e:
         output = container.decode('utf-8').strip()
         return output, ""
 
-    except docker.errors.ContainerError as e:
+    except docker_errors.ContainerError as e:
         error_message = e.stderr.decode('utf-8').strip()
         return "", error_message
-    except docker.errors.ImageNotFound:
+    except docker_errors.ImageNotFound:
         try:
             print(f"Pulling image: {image_name}. This may take a moment...")
             client.images.pull(image_name)

@@ -12,8 +12,6 @@ import { io } from 'socket.io-client';
 import Editor from '@monaco-editor/react';
 import Layout from '../components/Layout';
 import { getUsername, getToken } from '../utils/auth';
-import UserPresence from '../components/UserPresence';
-import '../components/UserPresence.css';
 
 const RoomPage = () => {
   const { roomId } = useParams();
@@ -320,6 +318,12 @@ const RoomPage = () => {
               setLanguage(data.language || 'python');
               setView('coding');
               setCode(data.problem.template_code || '');
+              // Always fetch problems if not loaded
+              if (!problems.length) {
+                fetch(`http://127.0.0.1:5001/api/problems`)
+                  .then(res => res.json())
+                  .then(setProblems);
+              }
             } else {
               setView('lobby');
               // Fetch problems for lobby
@@ -692,10 +696,23 @@ const RoomPage = () => {
                <div className="w-full h-full grid grid-cols-1 lg:grid-cols-2 gap-3">
                  {/* Problem Description - Left Side */}
                  <div className="bg-gray-900 rounded-xl shadow-xl p-3 flex flex-col h-full">
-                   <h2 className="text-lg font-bold mb-2 text-indigo-300">{problem?.title}</h2>
-                   <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-line flex-1">
-                     {problem?.description}
-                   </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <h2 className="text-lg font-bold text-indigo-300 flex-1">{problem?.title}</h2>
+                  {/* Problem Selector Dropdown */}
+                  <select
+                    value={problem?.id || ''}
+                    onChange={e => handleLoadProblem(e.target.value)}
+                    className="bg-gray-800 text-white rounded-lg px-2 py-1 text-xs border border-gray-700"
+                  >
+                    <option value="" disabled>Select Problem</option>
+                    {problems.map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="text-gray-300 text-xs leading-relaxed whitespace-pre-line flex-1">
+                  {problem?.description}
+                </div>
                  </div>
                 
                 <div className="mb-2">
@@ -719,7 +736,7 @@ const RoomPage = () => {
                          <option value="java">Java</option>
                        </select>
                      </div>
-                     <div className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden relative">
+                     <div className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden">
                        <Editor
                          height="100%"
                          defaultLanguage={getMonacoLanguage(language)}
@@ -739,20 +756,6 @@ const RoomPage = () => {
                            readOnly: false
                          }}
                        />
-                       {editorRef.current && socketRef.current && (
-                         <UserPresence 
-                           editor={editorRef.current}
-                           socket={socketRef.current}
-                           roomId={roomId}
-                         />
-                       )}
-                       {editorRef.current && socketRef.current && (
-                         <UserPresence
-                           editor={editorRef.current}
-                           socket={socketRef.current}
-                           roomId={roomId}
-                         />
-                       )}
                      </div>
                      <div className="flex items-center gap-2 mt-2">
                        <button onClick={handleRunCode} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-lg transition-all duration-150 text-xs">Run Code</button>
@@ -762,8 +765,10 @@ const RoomPage = () => {
                    
                    {/* Output Section */}
                    <div className="bg-gray-900 rounded-xl shadow-xl p-2 h-32">
-                     <h3 className="text-sm font-bold text-gray-200 mb-1">Output</h3>
-                     <pre className="w-full h-24 bg-gray-950 text-green-400 font-mono p-2 rounded-xl border border-gray-800 whitespace-pre-wrap text-xs">{output}</pre>
+                     <h3 className="text-sm font-bold text-gray-700 mb-1">Output</h3>
+                     <pre className="w-full h-24 bg-gray-950 text-green-800 font-mono p-2 rounded-xl border border-gray-300 whitespace-pre-wrap text-xs">
+                       {output ? output : 'No output yet. Run or submit your code to see results.'}
+                     </pre>
                    </div>
                  </div>
                </div>

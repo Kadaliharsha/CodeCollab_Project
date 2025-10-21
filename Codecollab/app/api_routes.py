@@ -54,8 +54,7 @@ def presence_to_dict(p):
 def broadcast_room_presence(room_id):
     presences = UserPresence.query.filter_by(room_id=room_id).all()
     payload = [presence_to_dict(p) for p in presences]
-    emit('presence_snapshot', {"room_id": room_id, "users": payload}, to=room_id)
-    
+    emit('presence_snapshot', {"room_id": room_id, "users": payload}, to=room_id)    
 # ... (Authentication and other routes remain the same) ...
 def generate_room_id():
     return str(uuid.uuid4().hex)[:8]
@@ -291,52 +290,6 @@ def handle_request_existing_users(data):
     users_in_room = [{'id': i, 'username': p.username, 'color': p.user_color} for i, p in enumerate(presences)]
     emit('existing_users', {'users': users_in_room})
 
-@socketio.on('user_cursor_update')
-def handle_user_cursor_update(data):
-    room_id = data.get('room_id')
-    username = data.get('username')
-    position = data.get('position')
-    selection = data.get('selection')
-    
-    # Update user's cursor and selection in the database
-    updates = {}
-    if position:
-        updates.update({
-            'cursor_line': position['lineNumber'],
-            'cursor_column': position['column']
-        })
-        # Emit cursor position separately to maintain compatibility
-        emit('presence_cursor', {
-            'username': username, 
-            'cursor': {
-                'line': position['lineNumber'], 
-                'column': position['column']
-            }
-        }, to=room_id, include_self=False)
-    
-    if selection:
-        updates.update({
-            'selection_start_line': selection['startLineNumber'],
-            'selection_start_column': selection['startColumn'],
-            'selection_end_line': selection['endLineNumber'],
-            'selection_end_column': selection['endColumn']
-        })
-        # Emit selection separately to maintain compatibility
-        emit('presence_selection', {
-            'username': username,
-            'start': {
-                'line': selection['startLineNumber'],
-                'column': selection['startColumn']
-            },
-            'end': {
-                'line': selection['endLineNumber'],
-                'column': selection['endColumn']
-            }
-        }, to=room_id, include_self=False)
-    
-    if updates:
-        presence = upsert_presence(room_id, username, updates)
-
 @socketio.on('code_change')
 def handle_code_change(data):
     room_id = data.get('room_id')
@@ -511,8 +464,12 @@ def handle_submit_code(data):
     details = ""
     passed_all_tests = True
     for i, test_case in enumerate(problem.test_cases):
-        # Pass the test case input as the third argument
         actual_output, error = run_code(user_code, language, test_case.input_data)
+        # Sanitize output: only compare the last non-empty line
+        if actual_output:
+            lines = [line for line in actual_output.splitlines() if line.strip()]
+            if lines:
+                actual_output = lines[-1]
         if error:
             verdict = "Runtime Error"
             details = f"Test Case #{i+1} failed with an error:\n{error}"
@@ -526,8 +483,8 @@ def handle_submit_code(data):
     if passed_all_tests:
         verdict = "Accepted"
         details = f"Congratulations! You passed all {len(problem.test_cases)} test cases."
-        record_event(room_id, "submit", {"verdict": verdict})
-        emit('submit_result', {'verdict': verdict, 'details': details}, to=room_id)
+    record_event(room_id, "submit", {"verdict": verdict})
+    emit('submit_result', {'verdict': verdict, 'details': details}, to=room_id)
         
 @socketio.on('presence_init')
 def handle_presence_init(data):

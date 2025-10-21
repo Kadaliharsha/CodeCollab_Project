@@ -4,78 +4,60 @@ from app.models import Problem, TestCase, Room
 # Create a Flask app instance to work with the database
 app = create_app()
 
-def seed_database():
-    """
-    This function populates the database with initial coding problems
-    and their test cases.
-    """
+def seed_problems():
+    # FizzBuzz
+    fizzbuzz = Problem()
+    fizzbuzz.title = "FizzBuzz"
+    fizzbuzz.description = "Write a program that prints the numbers from 1 to 100. But for multiples of three print 'Fizz' instead of the number and for the multiples of five print 'Buzz'. For numbers which are multiples of both three and five print 'FizzBuzz'."
+    fizzbuzz_testcases = []
+    tc = TestCase(); tc.input_data = "15"; tc.expected_output = "1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz"; fizzbuzz_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "5"; tc.expected_output = "1 2 Fizz 4 Buzz"; fizzbuzz_testcases.append(tc)
+    fizzbuzz.test_cases.extend(fizzbuzz_testcases)
+
+    # Palindrome Number
+    palindrome = Problem()
+    palindrome.title = "Palindrome Number"
+    palindrome.description = "Determine whether an integer is a palindrome. An integer is a palindrome when it reads the same backward as forward."
+    palindrome_testcases = []
+    tc = TestCase(); tc.input_data = "121"; tc.expected_output = "True"; palindrome_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "-121"; tc.expected_output = "False"; palindrome_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "10"; tc.expected_output = "False"; palindrome_testcases.append(tc)
+    palindrome.test_cases.extend(palindrome_testcases)
+
+    # Maximum Subarray
+    max_subarray = Problem()
+    max_subarray.title = "Maximum Subarray"
+    max_subarray.description = "Find the contiguous subarray which has the largest sum and return its sum."
+    max_subarray_testcases = []
+    tc = TestCase(); tc.input_data = "-2 1 -3 4 -1 2 1 -5 4"; tc.expected_output = "6"; max_subarray_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "1"; tc.expected_output = "1"; max_subarray_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "5 4 -1 7 8"; tc.expected_output = "23"; max_subarray_testcases.append(tc)
+    max_subarray.test_cases.extend(max_subarray_testcases)
+
+    # Two Sum
+    two_sum = Problem()
+    two_sum.title = "Two Sum"
+    two_sum.description = "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target."
+    two_sum_testcases = []
+    tc = TestCase(); tc.input_data = "2 7 11 15\n9"; tc.expected_output = "0 1"; two_sum_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "3 2 4\n6"; tc.expected_output = "1 2"; two_sum_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "3 3\n6"; tc.expected_output = "0 1"; two_sum_testcases.append(tc)
+    two_sum.test_cases.extend(two_sum_testcases)
+
+    # Reverse Linked List
+    reverse_ll = Problem()
+    reverse_ll.title = "Reverse Linked List"
+    reverse_ll.description = "Reverse a singly linked list."
+    reverse_ll_testcases = []
+    tc = TestCase(); tc.input_data = "1 2 3 4 5"; tc.expected_output = "5 4 3 2 1"; reverse_ll_testcases.append(tc)
+    tc = TestCase(); tc.input_data = "1 2"; tc.expected_output = "2 1"; reverse_ll_testcases.append(tc)
+    tc = TestCase(); tc.input_data = ""; tc.expected_output = ""; reverse_ll_testcases.append(tc)
+    reverse_ll.test_cases.extend(reverse_ll_testcases)
+
+    db.session.add_all([fizzbuzz, palindrome, max_subarray, two_sum, reverse_ll])
+    db.session.commit()
+
+if __name__ == "__main__":
     with app.app_context():
-        # --- Ensure all tables are created before we start ---
-        print("Creating database tables if they don't exist...")
-        db.create_all()
-        print("Done.")
-
-        # --- Clean up old data ---
-        print("Deleting existing problems and test cases...")
-        # FIXED: Delete in the correct order to respect foreign keys
-        TestCase.query.delete()
-        Room.query.delete() # Delete rooms before problems
-        Problem.query.delete()
-        db.session.commit()
-        print("Done.")
-
-        # --- Problem 1: Reverse a String ---
-        print("Creating Problem 1: Reverse a String")
-        problem1 = Problem()
-        problem1.title = "Reverse a String"
-        problem1.description = "Write a Python function `solve(s)` that takes a string `s` and returns the string reversed."
-        problem1.template_code = "def solve(s):\n    # Your code here\n    return"
-        db.session.add(problem1)
-        db.session.commit()
-
-        # Test cases now expect the raw string output, without extra quotes.
-        tc1_1 = TestCase()
-        tc1_1.problem_id = problem1.id
-        tc1_1.input_data = '"hello"'
-        tc1_1.expected_output = 'olleh'
-        tc1_2 = TestCase()
-        tc1_2.problem_id = problem1.id
-        tc1_2.input_data = '"world"'
-        tc1_2.expected_output = 'dlrow'
-        tc1_3 = TestCase()  # An empty string prints nothing
-        tc1_3.problem_id = problem1.id
-        tc1_3.input_data = '""'
-        tc1_3.expected_output = ''
-
-        db.session.add_all([tc1_1, tc1_2, tc1_3])
-
-        # --- Problem 2: Two Sum ---
-        print("Creating Problem 2: Two Sum")
-        problem2 = Problem()
-        problem2.title = "Two Sum"
-        problem2.description = "Write a Python function `solve(nums, target)` that takes a list of integers `nums` and an integer `target`, and returns the indices of the two numbers that add up to the target."
-        problem2.template_code = "def solve(nums, target):\n    # Your code here\n    return"
-        db.session.add(problem2)
-        db.session.commit()
-
-        # Test cases now expect the raw list output.
-        tc2_1 = TestCase()
-        tc2_1.problem_id = problem2.id
-        tc2_1.input_data = '[2, 7, 11, 15], 9'
-        tc2_1.expected_output = '[0, 1]'
-        tc2_2 = TestCase()
-        tc2_2.problem_id = problem2.id
-        tc2_2.input_data = '[3, 2, 4], 6'
-        tc2_2.expected_output = '[1, 2]'
-        tc2_3 = TestCase()
-        tc2_3.problem_id = problem2.id
-        tc2_3.input_data = '[3, 3], 6'
-        tc2_3.expected_output = '[0, 1]'
-        db.session.add_all([tc2_1, tc2_2, tc2_3])
-
-        # --- Final Commit ---
-        db.session.commit()
-        print("Database has been seeded successfully!")
-
-if __name__ == '__main__':
-    seed_database()
+        seed_problems()
+        print("Problems seeded!")
