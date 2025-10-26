@@ -1,4 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
+import Editor from '@monaco-editor/react';
+import Layout from '../components/Layout';
+import { getUsername, getToken } from '../utils/auth';
+
 // Debounce utility
 function debounce(func, wait) {
   let timeout;
@@ -7,17 +13,10 @@ function debounce(func, wait) {
     timeout = setTimeout(() => func.apply(this, args), wait);
   };
 }
-import { useParams, useNavigate } from 'react-router-dom';
-import { io } from 'socket.io-client';
-import Editor from '@monaco-editor/react';
-import Layout from '../components/Layout';
-import { getUsername, getToken } from '../utils/auth';
 
 const RoomPage = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  
-  // State for the view and data
   const [view, setView] = useState('lobby'); // 'lobby' or 'coding'
   const [problems, setProblems] = useState([]);
   const [problem, setProblem] = useState(null);
@@ -29,7 +28,8 @@ const RoomPage = () => {
   const [users, setUsers] = useState([]); // Track users in room
   const [isLoadingUsers, setIsLoadingUsers] = useState(true); // Track if users are loading
   const [typingUsers, setTypingUsers] = useState({}); // Track users who are typing
-     // Refs for instances that shouldn't trigger re-renders
+  const editorWrapperRef = useRef(null);
+  const [overlayPos, setOverlayPos] = useState(null);
   const socketRef = useRef(null);
   const editorRef = useRef(null);
   const isUpdatingFromSocket = useRef(false);
@@ -38,6 +38,9 @@ const RoomPage = () => {
   const messageIdCounter = useRef(0); // Unique message ID to prevent echo loops
   const recentMessageIds = useRef(new Set()); // Track recent message IDs to prevent echo loops
   const lastUpdateTime = useRef(0); // Track last update time to prevent rapid updates
+  const [localTyping, setLocalTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
+  const TYPING_DEBOUNCE_MS = 1200;
 
   // Function to get Monaco language ID
   const getMonacoLanguage = (lang) => {
@@ -49,7 +52,7 @@ const RoomPage = () => {
     }
   };
 
-     // Function to handle editor changes
+  // Function to handle editor changes
   // Debounced socket emission for code changes
   const debouncedEmitRef = useRef();
 
@@ -59,25 +62,25 @@ const RoomPage = () => {
     if (!isUpdatingFromSocket.current && value !== undefined) {
        // Additional check: don't send if the value is the same as current code
       if (value !== code) {
-        console.log('🔄 handleEditorChange: value changed from', code, 'to', value);
+        console.log('handleEditorChange: value changed from', code, 'to', value);
          
                  // Prevent sending duplicate code - more robust check
         if (value === lastSentCode.current) {
-          console.log('🔄 Skipping socket emission - duplicate code detected');
+          console.log('Skipping socket emission - duplicate code detected');
           setCode(value);
           return;
         }
         
         // Additional check: don't send if this is the same content we just received
         if (value === lastReceivedCode.current) {
-          console.log('🔄 Skipping socket emission - content matches lastReceivedCode');
+          console.log('Skipping socket emission - content matches lastReceivedCode');
           setCode(value);
           return;
         }
          
          // Final safety check: don't send if we're in the middle of a socket update
         if (isUpdatingFromSocket.current) {
-          console.log('🔄 Skipping socket emission - socket update in progress');
+          console.log('Skipping socket emission - socket update in progress');
           setCode(value);
           return;
         }
@@ -87,12 +90,12 @@ const RoomPage = () => {
           setCode(value);
         }
         lastSentCode.current = value; // Track what we just sent
-        console.log('🔄 Updated lastSentCode in handleEditorChange to:', value.substring(0, 50) + '...');
+        console.log('Updated lastSentCode in handleEditorChange to:', value.substring(0, 50) + '...');
          
         // Immediate socket emission for better real-time sync
         if (socketRef.current) {
           const messageId = ++messageIdCounter.current;
-           console.log('🚀 Sending code_change:', { room_id: roomId, code_content: value, message_id: messageId });
+           console.log('Sending code_change:', { room_id: roomId, code_content: value, message_id: messageId });
            
            // Track this message ID to prevent echo loops
            recentMessageIds.current.add(messageId);
@@ -113,13 +116,13 @@ const RoomPage = () => {
           console.log('Socket connected:', socketRef.current.connected);
           console.log('Socket id:', socketRef.current.id);
         } else {
-          console.error('❌ Socket not available!');
+          console.error('Socket not available!');
         }
       } else {
-        console.log('🔄 Skipping socket emission - value unchanged');
+        console.log('Skipping socket emission - value unchanged');
       }
     } else if (isUpdatingFromSocket.current) {
-      console.log('🔄 Skipping socket emission - updating from socket');
+      console.log('Skipping socket emission - updating from socket');
     }
   }, [roomId, code]);
 
@@ -129,10 +132,16 @@ const RoomPage = () => {
   }, [emitCodeChange]);
 
 
-
   // Typing indicator state
-  const typingTimeoutRef = useRef();
   const username = getUsername() || 'User';
+  const sendTyping = (isTyping) => {
+    if (!socketRef.current) return;
+    try {
+      socketRef.current.emit('typing', { room_id: roomId, username, typing: isTyping });
+    } catch (e) {
+      console.warn('Failed to emit typing event', e);
+    }
+  }
 
   // Debounced function to emit 'typing: false' after pause
   const emitTypingStopped = useCallback(() => {
@@ -143,18 +152,29 @@ const RoomPage = () => {
 
   // Main editor change handler (calls debounced emit and typing event)
   const handleEditorChange = useCallback((value, event) => {
-    // Emit typing: true immediately
-    if (socketRef.current) {
-      socketRef.current.emit('typing', { room_id: roomId, username, typing: true });
+    // Only emit typing events if we're not updating from a socket event
+    if (!isUpdatingFromSocket.current) {
+      // Emit typing event immediately if we weren't already typing
+      if (!localTyping) {
+        sendTyping(true);
+      }
+      
+      // Reset the typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Set up new timeout to clear typing status
+      typingTimeoutRef.current = setTimeout(() => {
+        sendTyping(false);
+      }, TYPING_DEBOUNCE_MS);
+      
+      // Handle code change
+      if (debouncedEmitRef.current) {
+        debouncedEmitRef.current(value);
+      }
     }
-    // Reset typing stopped debounce
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(emitTypingStopped, 1000); // 1s pause
-    // Debounced code change
-    if (debouncedEmitRef.current) {
-      debouncedEmitRef.current(value);
-    }
-  }, [emitTypingStopped, username]);
+  }, [localTyping, sendTyping]);
 
   // Function to handle editor mount
   const handleEditorDidMount = useCallback((editor, monaco) => {
@@ -179,6 +199,7 @@ const RoomPage = () => {
     });
   }, []); // Remove code dependency to prevent remounting
 
+  // NOTE: local typing is handled inside `handleEditorChange` above. Removed legacy handler.
      // Function to update editor content from socket
   const updateEditorContent = useCallback((newCode) => {
     console.log('updateEditorContent called with:', newCode);
@@ -195,7 +216,7 @@ const RoomPage = () => {
       const currentPosition = editorRef.current.getPosition();
       const currentSelection = editorRef.current.getSelection();
        
-       // Always update the content for perfect sync
+      // Always update the content for perfect sync
       const currentValue = editorRef.current.getValue();
       if (currentValue !== newCode) {
          // Use executeEdits with a special flag to prevent onChange
@@ -212,25 +233,25 @@ const RoomPage = () => {
            // Apply the edit without triggering onChange
           model.pushEditOperations([], edits, () => null);
            
-                       // Update tracking variables to prevent duplicate emissions
+            // Update tracking variables to prevent duplicate emissions
             lastSentCode.current = newCode;
             lastReceivedCode.current = newCode;
-            console.log('🔄 Updated tracking variables to:', newCode.substring(0, 50) + '...');
+            console.log('Updated tracking variables to:', newCode.substring(0, 50) + '...');
           } else {
-                       // Fallback to setValue if model is not available
+            // Fallback to setValue if model is not available
             editorRef.current.setValue(newCode);
             lastSentCode.current = newCode;
             lastReceivedCode.current = newCode;
           }
       }
        
-       // Smart cursor position restoration
+      // Smart cursor position restoration
       if (currentPosition) {
         const lines = newCode.split('\n');
         const targetLine = Math.min(currentPosition.lineNumber, lines.length);
         const targetColumn = Math.min(currentPosition.column, lines[targetLine - 1]?.length || 1);
          
-         // Restore cursor position
+        // Restore cursor position
         editorRef.current.setPosition({
           lineNumber: targetLine,
           column: targetColumn
@@ -250,9 +271,9 @@ const RoomPage = () => {
          }
        }
        
-               // Reset the flag immediately after the update is complete
+        // Reset the flag immediately after the update is complete
         isUpdatingFromSocket.current = false;
-        console.log('🔄 Reset isUpdatingFromSocket flag');
+        console.log('Reset isUpdatingFromSocket flag');
        console.log('Editor content updated successfully');
      } else {
        console.log('Editor not ready yet');
@@ -293,16 +314,6 @@ const RoomPage = () => {
         // Join room with authenticated user
         console.log('Joining room:', roomId, 'with username:', username); // Debug log
         socket.emit('join_room', { room_id: roomId, username, authenticated: true });
-        
-        // Test socket connection immediately
-        console.log('Testing socket connection...');
-        socket.emit('code_change', { room_id: roomId, code_content: 'test from React' });
-        
-        // Also emit a test code_change to see if the room exists
-        setTimeout(() => {
-          console.log('Testing code_change for room:', roomId);
-          socket.emit('code_change', { room_id: roomId, code_content: 'test delayed' });
-        }, 1000);
         
         // Request existing users in the room
         console.log('Requesting existing users for room:', roomId); // Debug log
@@ -345,10 +356,6 @@ const RoomPage = () => {
     // Test event listeners
     socket.on('connected', (data) => {
       console.log('🎉 Received connected event:', data);
-    });
-
-    socket.on('test_response', (data) => {
-      console.log('🧪 Received test_response:', data);
     });
 
     socket.on('problem_loaded', (data) => {
@@ -447,8 +454,11 @@ const RoomPage = () => {
     socket.on('existing_users', (data) => {
       console.log('Received existing_users event:', data); // Debug log
       // Set the existing users list (this will include the current user and others)
-      setUsers(data.users || []);
-      setStatus(`Connected! Found ${data.users?.length || 0} users in room`);
+      // Be defensive about payload shape: server may return { users: [...] } or an array directly
+      const usersPayload = Array.isArray(data) ? data : (data?.users || []);
+      console.log('Parsed existing users:', usersPayload);
+      setUsers(usersPayload);
+      setStatus(`Connected! Found ${usersPayload.length || 0} users in room`);
       setIsLoadingUsers(false); // Set loading to false after users are fetched
     });
 
@@ -478,9 +488,30 @@ const RoomPage = () => {
 
     // Cleanup function to disconnect the socket when the component is unmounted
     return () => {
-      socket.disconnect();
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      try {
+        socket.disconnect();
+      } catch (e) {
+        console.warn('Error disconnecting socket on cleanup', e);
+      }
     };
   }, [roomId, navigate, updateEditorContent]);
+
+  // Recompute overlay position when typing users change or window resizes
+  useEffect(() => {
+    const computePos = () => {
+      if (!editorWrapperRef.current) return setOverlayPos(null);
+      const rect = editorWrapperRef.current.getBoundingClientRect();
+      // position overlay near top-right inside editor
+      setOverlayPos({ top: rect.top + 8, left: rect.right - 260 });
+    };
+    computePos();
+    window.addEventListener('resize', computePos);
+    return () => window.removeEventListener('resize', computePos);
+  }, [typingUsers]);
 
 
   // Function to handle problem selection from lobby
@@ -575,47 +606,6 @@ const RoomPage = () => {
                        className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
                      >
                        🔌 Disconnect
-                     </button>
-                     
-                     <button
-                       onClick={() => {
-                         if (socketRef.current) {
-                           console.log('🧪 Testing socket connection...');
-                           socketRef.current.emit('test_message', { 
-                             room_id: roomId, 
-                             message: 'Test from React frontend' 
-                           });
-                         }
-                       }}
-                       className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
-                     >
-                       🧪 Test Socket
-                     </button>
-                     
-                     <button
-                       onClick={() => {
-                         console.log('🧪 Testing HTTP endpoint...');
-                         fetch('http://127.0.0.1:5001/api/test-socket', {
-                           method: 'POST',
-                           headers: {
-                             'Content-Type': 'application/json',
-                           },
-                           body: JSON.stringify({
-                             room_id: roomId,
-                             message: 'Test from HTTP endpoint'
-                           })
-                         })
-                         .then(res => res.json())
-                         .then(data => {
-                           console.log('🧪 HTTP test response:', data);
-                         })
-                         .catch(error => {
-                           console.error('🧪 HTTP test error:', error);
-                         });
-                       }}
-                       className="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm"
-                     >
-                       🧪 Test HTTP
                      </button>
                   </div>
                 </div>
@@ -716,6 +706,7 @@ const RoomPage = () => {
                  </div>
                 
                 <div className="mb-2">
+                  {/* Show other users who are typing */}
                   {Object.entries(typingUsers)
                     .filter(([user, isTyping]) => isTyping && user !== username)
                     .map(([user]) => (
@@ -736,7 +727,35 @@ const RoomPage = () => {
                          <option value="java">Java</option>
                        </select>
                      </div>
-                     <div className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden">
+                     <div ref={editorWrapperRef} className="w-full flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden relative">
+                       {/* Typing indicator overlay inside the editor area (top-right) */}
+                       {Object.entries(typingUsers).filter(([u, t]) => t && u !== username).length > 0 && (
+                         <div className="absolute top-2 right-2 z-[9999] pointer-events-none bg-gray-800 bg-opacity-85 text-xs text-gray-200 px-2 py-1 rounded-md flex items-center gap-2">
+                           <svg className="w-3 h-3 text-gray-300 animate-pulse" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 8 8"><circle cx="1" cy="4" r="1"/><circle cx="4" cy="4" r="1"/><circle cx="7" cy="4" r="1"/></svg>
+                           <span>
+                             {Object.entries(typingUsers)
+                               .filter(([u, t]) => t && u !== username)
+                               .map(([u]) => u)
+                               .slice(0, 3)
+                               .join(', ')}
+                             {Object.entries(typingUsers).filter(([u, t]) => t && u !== username).length === 1 ? ' is typing...' : ' are typing...'}
+                           </span>
+                         </div>
+                       )}
+
+                      {/* Fallback fixed-position overlay in case Monaco layers hide the in-editor overlay */}
+                      {overlayPos && Object.entries(typingUsers).filter(([u, t]) => t && u !== username).length > 0 && (
+                        <div style={{ position: 'fixed', top: overlayPos.top, left: overlayPos.left }} className="z-[99999] pointer-events-none">
+                          <div className="bg-indigo-800 bg-opacity-95 text-xs text-white px-3 py-1 rounded-md shadow-lg flex items-center gap-2">
+                            <svg className="w-3 h-3 text-white animate-pulse" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 8 8"><circle cx="1" cy="4" r="1"/><circle cx="4" cy="4" r="1"/><circle cx="7" cy="4" r="1"/></svg>
+                            <span>
+                              {Object.entries(typingUsers).filter(([u, t]) => t && u !== username).map(([u]) => u).slice(0,3).join(', ')}
+                              {Object.entries(typingUsers).filter(([u, t]) => t && u !== username).length === 1 ? ' is typing...' : ' are typing...'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                        <Editor
                          height="100%"
                          defaultLanguage={getMonacoLanguage(language)}

@@ -7,7 +7,6 @@ from flask_socketio import join_room, leave_room, emit
 from app.code_executor import run_code
 from datetime import timedelta
 
-
 # Create a Blueprint for API routes
 bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -29,10 +28,8 @@ def upsert_presence(room_id, username, updates):
         presence = UserPresence()
         presence.room_id = room_id
         presence.username = username
-        
         presence.user_color = UserPresence.get_next_user_color(room_id)
         db.session.add(presence)
-        
     for key, value in updates.items():
         setattr(presence, key, value)
     db.session.commit()
