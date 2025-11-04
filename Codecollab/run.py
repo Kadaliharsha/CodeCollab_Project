@@ -1,10 +1,17 @@
 from app import create_app, db, socketio
 from app.models import User, Room, SessionEvent, UserPresence 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 app = create_app()
 CORS(app, origins=["https://codecollab.vercel.app"])
+
+@app.route('/')
+def home():
+    return jsonify({
+        "message": "CodeCollab Backend is Live!",
+        "status": "OK"
+    }), 200
 
 @app.shell_context_processor
 def make_shell_context():
