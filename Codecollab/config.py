@@ -5,7 +5,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'a_super_secret_key')
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'another_super_secret_key')
     
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://postgres:harsha1234@db.gsgzjdeyqngjixyjqkrr.supabase.co:5432/postgres')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///codecollab.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # --- NEW: Database Connection Pool Settings ---
