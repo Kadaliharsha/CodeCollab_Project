@@ -18,7 +18,8 @@ function App() {
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
       <Routes>
-        <Route path="/" element={<ProtectedRoute> <HomePage /></ProtectedRoute>} />
+        {/* Make homepage public so users can see landing/home even when not authenticated */}
+        <Route path="/" element={<HomePage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
