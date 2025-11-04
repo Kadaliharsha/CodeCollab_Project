@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import Editor from '@monaco-editor/react';
 import Layout from '../components/Layout';
 import { getUsername, getToken } from '../utils/auth';
+import { buildApiUrl } from '../utils/apiConfig';
 
 // Debounce utility
 function debounce(func, wait) {
@@ -64,7 +65,7 @@ const RoomPage = () => {
       if (value !== code) {
         console.log('handleEditorChange: value changed from', code, 'to', value);
          
-                 // Prevent sending duplicate code - more robust check
+        // Prevent sending duplicate code - more robust check
         if (value === lastSentCode.current) {
           console.log('Skipping socket emission - duplicate code detected');
           setCode(value);
@@ -293,7 +294,7 @@ const RoomPage = () => {
     }
 
     setIsCheckingAuth(false);
-    const socket = io('http://127.0.0.1:5001');
+    const socket = io(import.meta.env.VITE_API_BASE_URL || '');
     socketRef.current = socket;
 
     // --- All Socket Event Listeners are defined here ---
@@ -320,7 +321,7 @@ const RoomPage = () => {
         socket.emit('request_existing_users', { room_id: roomId });
         
         // Fetch the initial state of the room
-        fetch(`http://127.0.0.1:5001/api/rooms/${roomId}`)
+        fetch(buildApiUrl(`api/rooms/${roomId}`))
           .then(res => res.json())
           .then(data => {
             console.log('Room data received:', data);
@@ -331,14 +332,14 @@ const RoomPage = () => {
               setCode(data.problem.template_code || '');
               // Always fetch problems if not loaded
               if (!problems.length) {
-                fetch(`http://127.0.0.1:5001/api/problems`)
+                fetch(buildApiUrl(`api/problems`))
                   .then(res => res.json())
                   .then(setProblems);
               }
             } else {
               setView('lobby');
               // Fetch problems for lobby
-              fetch(`http://127.0.0.1:5001/api/problems`)
+              fetch(buildApiUrl(`api/problems`))
                 .then(res => res.json())
                 .then(setProblems);
             }
@@ -368,7 +369,7 @@ const RoomPage = () => {
     socket.on('lobby_activated', (data) => {
       setView('lobby');
       setProblem(null);
-      fetch(`http://127.0.0.1:5001/api/problems`)
+      fetch(buildApiUrl(`api/problems`))
         .then(res => res.json())
         .then(setProblems);
     });

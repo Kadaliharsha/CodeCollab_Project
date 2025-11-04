@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl } from '../utils/apiConfig';
 
 export default function ForgotPassword() {
     const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ export default function ForgotPassword() {
         try {
           setIsSending(true);
           // Using username for now (no email field in backend User model)
-          const res = await fetch('http://127.0.0.1:5001/api/auth/forgot', {
+          const res = await fetch(buildApiUrl('api/auth/forgot'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: email }) // treat input as username
@@ -82,8 +83,8 @@ export default function ForgotPassword() {
             <button
               onClick={async () => {
                 try {
-                  const res = await fetch('http://127.0.0.1:5001/api/auth/reset', {
-                    method: 'POST',
+                  const res = await fetch(buildApiUrl('auth/reset'), {
+                        method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token, new_password: newPass })
                   });

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUsername, getToken } from "../utils/auth";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
+import { buildApiUrl } from '../utils/apiConfig';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ function HomePage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch("http://127.0.0.1:5001/api/rooms", {
+      const response = await fetch(buildApiUrl("api/rooms"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

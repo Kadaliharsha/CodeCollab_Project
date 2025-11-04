@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Code2, Github, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { setToken, setUsername, getToken } from '../utils/auth';
+import { buildApiUrl } from '../utils/apiConfig';
 
 function AuthPage() {
   const navigate = useNavigate();
@@ -51,10 +52,10 @@ function AuthPage() {
     
     try {
       setIsLoading(true);
-      console.log('Making request to:', `http://127.0.0.1:5001${endpoint}`);
+      console.log('Making request to:', buildApiUrl(endpoint));
       console.log('Request body:', JSON.stringify({ username, password }));
       
-      const response = await fetch(`http://127.0.0.1:5001${endpoint}`, {
+      const response = await fetch(buildApiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
