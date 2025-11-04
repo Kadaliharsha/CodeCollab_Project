@@ -12,6 +12,15 @@ def home():
         "message": "CodeCollab Backend is Live!",
         "status": "OK"
     }), 200
+    
+@app.route("/test-db")
+def test_db():
+    try:
+        from app.models import User
+        count = User.query.count()
+        return {"status": "ok", "users": count}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
 
 @app.shell_context_processor
 def make_shell_context():
