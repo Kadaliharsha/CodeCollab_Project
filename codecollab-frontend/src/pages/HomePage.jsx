@@ -91,7 +91,7 @@ function HomePage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-sky-50 to-blue-100">
       {/* Header */}
       <Navbar
         isAuthenticated={isAuthenticated}
@@ -162,9 +162,9 @@ function HomePage() {
             {stats.map((stat, idx) => (
               <div
                 key={idx}
-                className="group bg-white/70 backdrop-blur-lg rounded-2xl border border-white/50 shadow-lg hover:shadow-2xl hover:scale-105 hover:-translate-y-1 transition-all duration-500 flex flex-col items-center justify-center text-center p-8 sm:p-10 lg:p-12 md:aspect-square"
+                className="group bg-gradient-to-br from-white/80 to-blue-50/60 backdrop-blur-lg rounded-2xl border border-blue-100 shadow-lg hover:shadow-blue-300/40  hover:scale-105 hover:-translate-y-1 transition-all duration-500 flex flex-col items-center justify-center text-center p-10 md:aspect-square"          
               >
-                <h3 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-blue-600 mb-3 transition-transform duration-300 group-hover:scale-110">
+                <h3 className="text-4xl font-extrabold text-blue-600 mb-2">
                   {stat.value}
                 </h3>
                 <p className="text-gray-700 text-base sm:text-lg lg:text-xl font-medium">{stat.label}</p>
