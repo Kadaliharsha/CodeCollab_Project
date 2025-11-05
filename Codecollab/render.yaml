@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: codecollab-project
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app --worker-class eventlet -w 1 --timeout 120
+    pythonVersion: 3.12.3
+    envVars:
+      - key: FLASK_ENV
+        value: production
