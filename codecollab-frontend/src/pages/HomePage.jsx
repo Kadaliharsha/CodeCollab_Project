@@ -110,7 +110,7 @@ function HomePage() {
               Code Together Learn Together
             </span>
             <br />
-            <span className="text-gray-800">Together in Real-Time</span>
+            <span className="text-gray-800">In Real-Time</span>
           </h1>
           <p className="text-lg md:text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
             Collaborate on coding problems, practice interviews, and build
@@ -158,7 +158,7 @@ function HomePage() {
           </div>
 
           {/* Features Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto px-6 lg:px-8 py-16">
+          <div className="mt-20 pt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 max-w-7xl mx-auto px-6 lg:px-8 py-20">
             {stats.map((stat, idx) => (
               <div
                 key={idx}
